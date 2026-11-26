@@ -22,14 +22,15 @@ API 默认监听 `127.0.0.1:19347`。接口文档在 `/api/docs`，机器可读�
 
 1. `POST /api/auth/login` 接收带 `email`、`password` 的 JSON。后续业务请求通过 `Authorization: Bearer <access_token>` 鉴权。
 2. `GET /api/spec` 查看 CSV 列、参数和结果口径。`GET /api/datasets` 查找演示台账，或用 `POST /api/datasets` 提交带 `name`、`csv` 的 JSON。
-3. `POST /api/runs` 提交 `dataset_id`、`label` 和可选的 `settings`。响应包含运行 ID 及最终状态。`GET /api/runs/{id}` 返回业务指标、表格或失败原因。
+3. `POST /api/runs` 提交 `dataset_id`、`label` 和可选的 `settings`。响应包含运行 ID 及最终状态。`GET /api/runs/{id}` 返回业务指标、表格或失败原因。计算成功会顺带生成各台口径模型包，写入「分台口径模型包」表。
 4. 负责人调用 `POST /api/runs/{id}/review`，提交 `decision`（`approved` 或 `rejected`）和 `note`。批准后可通过 `GET /api/runs/{id}/export/{table_key}` 下载业务表。表名和字段从运行结果取得。
+5. 用 `GET /api/runs/{id}/packages` 列出各台模型包，`GET /api/runs/{id}/packages/{bench}` 下载单台 JSON。断网复测台可直接运行 `python3 backend/scripts/merge_packages.py` 合并，在线也可 `POST /api/packages/merge` 合并；两者对缺台、重复台、混入另一运行都拒绝出全批概率。详见 [BUSINESS.md](BUSINESS.md#分台口径模型包与断网合并)。
 
 ## 代码与配置
 
-- `backend/src/domain` 实现数据规范、模拟样本和业务算法。
-- `backend/src/services` 与 `backend/src/models` 实现台账、计算、用户权限和复核记录。
+- `backend/src/domain` 实现数据规范、模拟样本、业务算法和分台模型包压缩（`packaging.py`、`package_format.py`）。
+- `backend/src/services` 与 `backend/src/models` 实现台账、计算、模型包、用户权限和复核记录。
 - `backend/src/routes`、`schemas` 和 `controllers` 提供 FastAPI 接口与输入输出约束。
-- `backend/migrations` 和 `backend/scripts` 提供 SQLite 初始化和可重复执行的演示数据装载。
+- `backend/migrations` 和 `backend/scripts` 提供 SQLite 初始化、可重复执行的演示数据装载，以及断网合并脚本 `merge_packages.py`（只依赖标准库）。
 
 可在 `.env` 中配置 `BACKEND_PORT`、`SEED_DEMO` 和 `JWT_SECRET`。演示账号、默认签名密钥及模拟台账用于本地验证。启用演示数据也可执行 `docker compose exec -T backend python -m scripts.seed_demo`。

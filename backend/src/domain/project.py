@@ -6,6 +6,7 @@ from .kde import GaussianKDE, select_bandwidth
 from .measurements import DATASET_NAME, DIAMETER_MAX, DIAMETER_MIN, FIELDS
 from .measurements import demo_rows, normalize_rows
 from .modes import find_turning_points, mode_evidence
+from .package_format import DEVIATION_LIMIT
 from .reporting import audit_table, bandwidth_table, density_table, modes_table, sessions_table, tolerance_table
 
 
@@ -19,11 +20,20 @@ SPEC = {
          'max': DIAMETER_MAX, 'step': 0.01},
         {'key': 'tolerance_upper_mm', 'label': '内口径公差上限（mm）', 'default': 21.55, 'min': DIAMETER_MIN,
          'max': DIAMETER_MAX, 'step': 0.01},
+        {'key': 'package_kernel_limit', 'label': '每包加权核上限', 'default': 24, 'min': 1, 'max': 256, 'step': 1},
+        {'key': 'package_deviation_limit', 'label': '单侧概率约定偏差', 'default': DEVIATION_LIMIT,
+         'min': 1e-8, 'max': DEVIATION_LIMIT, 'step': 0.0001},
     ],
-    'modules': {'datasets': '测径台账', 'runs': '带宽与公差设置', 'results': '峰谷与公差报告', 'reviews': '复查交班'},
+    'modules': {'datasets': '测径台账', 'runs': '带宽与公差设置', 'results': '峰谷与公差报告', 'reviews': '复查交班',
+                'packages': '口径模型包'},
     'limitation': '仅分析这批内口径。留出评分用于选带宽，最终密度使用全批测件。峰位随带宽变化，公差概率供测径复查。',
     'dataset_name': DATASET_NAME,
     'recommendation': '核对留出场次和带宽评分，再按分台公差尾部、峰谷位置安排测径复查。',
+    'packages': {
+        'description': '按台下载口径模型包，断网复测台可合并出全批公差概率。',
+        'deviation_limit': DEVIATION_LIMIT,
+        'default_kernel_limit': 24,
+    },
 }
 
 

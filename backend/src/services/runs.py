@@ -1,15 +1,20 @@
+import logging
 import math
 
 from fastapi import HTTPException
 from sqlalchemy import select
 
 from src.constants.workflow import Decision, Role, RunStatus
+from src.domain.package_format import PackageError
 from src.domain.project import SPEC
 from src.models.review import Review
 from src.models.run import Run
+from src.services import packages
 from src.services.catalog import get_dataset
 from src.services.execution import calculate
 from src.utils.time import utc_stamp
+
+logger = logging.getLogger(__name__)
 
 
 def run_info(run, review):
@@ -48,7 +53,8 @@ def validate_settings(settings):
 
 
 def create_run(session, payload, actor):
-    rows = get_dataset(session, payload.dataset_id).rows
+    dataset = get_dataset(session, payload.dataset_id)
+    rows = dataset.rows
     actor_id = actor.id
     settings = validate_settings(payload.settings)
     created_at = utc_stamp()
@@ -58,8 +64,33 @@ def create_run(session, payload, actor):
               created_at=created_at, settings=settings, result=result, error=error,
               status=RunStatus.FAILED if error is not None else RunStatus.COMPLETED)
     session.add(run)
+    session.flush()
+    if error is None:
+        attach_packages(session, run, rows, settings)
     session.commit()
     return run_info(run, None)
+
+
+def attach_packages(session, run, rows, settings):
+    """计算成功后为各台生成口径模型包，结果表并入运行结果。"""
+    bandwidth = run.result['metrics']['入选带宽（mm）']
+    try:
+        table, complete = packages.build(session, rows, settings, run.id, bandwidth)
+    except PackageError as error:
+        logger.warning('模型包生成失败：%s', error)
+        return
+    except Exception:
+        logger.exception('模型包生成失败')
+        return
+    run.result = {**run.result, 'tables': [*run.result['tables'], table]}
+    if not complete:
+        refused = [row['bench'] for row in table['rows'] if row['status'] == '拒绝发包']
+        run.result = {**run.result, 'warnings': [
+            *run.result['warnings'],
+            f"测径台 {'、'.join(refused)} 在每包核数上限内达不到约定偏差，已拒绝发包；"
+            '缺这些台时合并不出全批概率。',
+        ]}
+    session.flush()
 
 
 def export_table(session, run_id, key, actor):
